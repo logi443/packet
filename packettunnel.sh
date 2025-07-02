@@ -77,7 +77,7 @@ function generate_iran_config() {
             "name": "manip",
             "type": "IpManipulator",
             "settings": {
-                "protoswap": 136
+                "protoswap": 18
             },
             "next": "ipovsrc2"
         },
@@ -181,7 +181,7 @@ function generate_kharej_config() {
             "name": "manip",
             "type": "IpManipulator",
             "settings": {
-                "protoswap": 136
+                "protoswap": 18
             },
             "next": "ipovsrc2"
         },
