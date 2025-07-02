@@ -1,2 +1,2 @@
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/logi/packet/main/packettunnel.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/logi443/packet/main/packettunnel.sh)
