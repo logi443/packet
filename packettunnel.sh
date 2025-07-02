@@ -253,17 +253,17 @@ function install_menu() {
     log "Downloading core.json..."
     curl -fsSL "$CORE_URL" -o core.json
 
-    read -rp "Is this server 'iran' or 'kharej'? " role
+    read -rp "Is this server '1-iran' or '2-kharej'? " role
     read -rp "Enter Iran server public IP: " ip_iran
     read -rp "Enter Kharej server public IP: " ip_kharej
 
-    if [[ "$role" == "iran" ]]; then
+    if [[ "$role" == "1" ]]; then
         prompt_ports
         generate_iran_config "$ip_iran" "$ip_kharej"
-    elif [[ "$role" == "kharej" ]]; then
+    elif [[ "$role" == "2" ]]; then
         generate_kharej_config "$ip_kharej" "$ip_iran"
     else
-        echo "Invalid role. Must be 'iran' or 'kharej'."
+        echo "Invalid role. Must be '1' or '2'."
         exit 1
     fi
 
