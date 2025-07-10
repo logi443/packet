@@ -5,7 +5,7 @@ set -e
 INSTALL_DIR="/root/packettunnel"
 SERVICE_FILE="/etc/systemd/system/packettunnel.service"
 CORE_URL="https://raw.githubusercontent.com/logi443/packet/main/core.json"
-WATERWALL_URL="https://raw.githubusercontent.com/logi443/Packet/main/Waterwall"
+WATERWALL_URL="https://api.github.com/repos/radkesvat/WaterWall/releases/latest"
 
 function log() {
     echo "[+] $1"
