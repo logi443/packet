@@ -20,7 +20,7 @@ function require_root() {
 
 function header() {
   clear
-  echo "MultiPacket-By Meysam"
+  echo "MultiServerPacket-By Meysam"
   echo "==================="
   local ip
   ip="$(get_public_ip || true)"
