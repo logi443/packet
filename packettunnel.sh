@@ -15,10 +15,12 @@ function pause_return_menu() {
     echo
     read -rp "Press Enter to return to main menu..." _
 }
-
 function banner() {
     clear
     echo -e "\e[31m"
+
+    server_ip=$(get_public_ip)
+
     echo "=================================================="
     echo "██╗    ██╗ █████╗ ████████╗███████╗██████╗ ██╗    ██╗ █████╗ ██╗     ██╗"
     echo "██║    ██║██╔══██╗╚══██╔══╝██╔════╝██╔══██╗██║    ██║██╔══██╗██║     ██║"
@@ -27,7 +29,9 @@ function banner() {
     echo "╚███╔███╔╝██║  ██║   ██║   ███████╗██║  ██║╚███╔███╔╝██║  ██║███████╗███████╗"
     echo " ╚══╝╚══╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚══════╝╚══════╝"
     echo "                  WATERWALL-BY MEYSAM"
+    echo "                  SERVER IP: $server_ip"
     echo "=================================================="
+
     echo -e "\e[0m"
 }
 
