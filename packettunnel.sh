@@ -326,7 +326,7 @@ function main_menu() {
         echo "1) Install"
         echo "2) Uninstall"
         echo "3) Service Status"
-        echo "4) Exit"
+        echo "0) Exit"
         echo
         read -rp "Choose an option [1-4]: " choice
 
@@ -334,7 +334,7 @@ function main_menu() {
             1) install_menu ;;
             2) uninstall ;;
             3) status_service ;;
-            4) echo "Bye!"; exit 0 ;;
+            0) echo "Bye!"; exit 0 ;;
             *) echo "Invalid option."; pause_return_menu ;;
         esac
     done
