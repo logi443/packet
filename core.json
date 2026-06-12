@@ -26,6 +26,7 @@
     "misc": {
         "workers": 0,
         "ram-profile": "server",
+        "mtu":1400,
         "libs-path": "libs/"
     },
     "configs": [
