@@ -10,7 +10,7 @@ CORE_FILE="${INSTALL_DIR}/core.json"
 CORE_URL="https://raw.githubusercontent.com/logi443/packet/main/core.json"
 GITHUB_REPO="radkesvat/WaterWall"
 OPTIMIZE_MARKER="/etc/waterwall_optimize.ver"
-OPTIMIZE_VERSION="2"
+OPTIMIZE_VERSION="3"
 
 function log() { echo "[+] $1"; }
 
@@ -2005,8 +2005,10 @@ function sysctl_optimizations() {
 fs.file-max = 67108864
 
 # ===== Network Core =====
-net.core.default_qdisc = fq_codel
-net.core.netdev_max_backlog = 32768
+net.core.default_qdisc = fq
+net.core.netdev_max_backlog = 65536
+net.core.netdev_budget = 600
+net.core.netdev_budget_usecs = 20000
 net.core.optmem_max = 262144
 net.core.somaxconn = 65536
 net.core.rmem_default = 1048576
@@ -2040,6 +2042,8 @@ net.ipv4.tcp_ecn_fallback = 1
 net.ipv4.tcp_syncookies = 1
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_timestamps = 1
+net.ipv4.tcp_no_metrics_save = 1
+net.ipv4.tcp_moderate_rcvbuf = 1
 
 # ===== UDP =====
 net.ipv4.udp_mem = 65536 131072 262144
@@ -2051,6 +2055,8 @@ net.ipv4.conf.all.accept_redirects = 0
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.default.accept_redirects = 0
 net.ipv4.conf.default.send_redirects = 0
+net.ipv4.conf.all.rp_filter = 2
+net.ipv4.conf.default.rp_filter = 2
 net.ipv4.ip_forward = 1
 net.ipv4.ip_local_port_range = 1024 65535
 
@@ -2066,10 +2072,42 @@ vm.dirty_ratio = 30
 vm.dirty_background_ratio = 5
 vm.vfs_cache_pressure = 250
 vm.min_free_kbytes = 65536
+
+# ===== Netfilter (conntrack) =====
+net.netfilter.nf_conntrack_max = 1048576
+net.netfilter.nf_conntrack_tcp_timeout_established = 7200
+net.netfilter.nf_conntrack_tcp_timeout_time_wait = 30
 SYSEOF
 
     sysctl -p >/dev/null 2>&1
     log "sysctl parameters applied."
+}
+
+function optimize_tunnel_interfaces() {
+    log "Optimizing tunnel interfaces..."
+    local iface
+    for iface in wtun0 wtun1 wtun2; do
+        if ip link show "$iface" >/dev/null 2>&1; then
+            # Disable offloading on tunnel interfaces to reduce fragmentation
+            ethtool -K "$iface" gro off gso off tso off 2>/dev/null || true
+            # Set txqueuelen higher for better throughput
+            ip link set "$iface" txqueuelen 10000 2>/dev/null || true
+            log "  $iface: offload disabled, txqueuelen=10000"
+        fi
+    done
+
+    # Also optimize physical interfaces
+    local phys_iface
+    phys_iface="$(ip route show default 2>/dev/null | awk '/default/ {print $5}' | head -n1)"
+    if [[ -n "$phys_iface" ]]; then
+        ip link set "$phys_iface" txqueuelen 10000 2>/dev/null || true
+        log "  $phys_iface: txqueuelen=10000"
+    fi
+
+    # Install ethtool if not present
+    if ! command -v ethtool >/dev/null 2>&1; then
+        apt-get install -y -qq ethtool >/dev/null 2>&1 || true
+    fi
 }
 
 function limits_optimizations() {
@@ -2136,6 +2174,36 @@ function enable_bbr() {
     fi
 }
 
+function install_tunnel_tune_service() {
+    log "Creating tunnel-tune service for post-boot interface tuning..."
+    cat > /etc/systemd/system/waterwall-tune.service <<'TUNESVC'
+[Unit]
+Description=Waterwall Tunnel Interface Tuning
+After=network-online.target waterwall.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/sleep 3
+ExecStart=/bin/bash -c '\
+for iface in wtun0 wtun1 wtun2; do \
+    if ip link show "$iface" 2>/dev/null; then \
+        ethtool -K "$iface" gro off gso off tso off 2>/dev/null || true; \
+        ip link set "$iface" txqueuelen 10000 2>/dev/null || true; \
+    fi; \
+done; \
+PHYS=$(ip route show default | awk "/default/ {print \$5}" | head -n1); \
+[ -n "$PHYS" ] && ip link set "$PHYS" txqueuelen 10000 2>/dev/null || true'
+
+[Install]
+WantedBy=multi-user.target
+TUNESVC
+    systemctl daemon-reexec
+    systemctl enable waterwall-tune.service >/dev/null 2>&1
+    log "waterwall-tune.service enabled (runs after each boot)."
+}
+
 function get_installed_optimize_version() {
     if [[ -f "$OPTIMIZE_MARKER" ]]; then
         cat "$OPTIMIZE_MARKER" 2>/dev/null
@@ -2192,10 +2260,10 @@ function optimize_server() {
 
     echo
     echo "This will apply the following optimizations:"
-    echo "  - Kernel & TCP tuning (sysctl)"
-    echo "  - BBR congestion control"
+    echo "  - Kernel & TCP tuning (sysctl + BBR with fq qdisc)"
     echo "  - System limits (ulimits / nofile)"
-    echo "  - Network buffer optimization"
+    echo "  - Network buffer & conntrack optimization"
+    echo "  - Tunnel interface tuning (offload, txqueuelen)"
     echo
 
     if [[ -z "$installed_ver" ]]; then
@@ -2219,9 +2287,24 @@ function optimize_server() {
         fi
     fi
 
+    # Install ethtool for interface tuning
+    if ! command -v ethtool >/dev/null 2>&1; then
+        log "Installing ethtool..."
+        apt-get update -qq >/dev/null 2>&1
+        apt-get install -y -qq ethtool >/dev/null 2>&1 || true
+    fi
+
+    # Load conntrack module for nf_conntrack sysctl params
+    modprobe nf_conntrack 2>/dev/null || true
+    if ! grep -q "nf_conntrack" /etc/modules-load.d/*.conf 2>/dev/null; then
+        echo "nf_conntrack" >> /etc/modules-load.d/bbr.conf
+    fi
+
     sysctl_optimizations
     limits_optimizations
     enable_bbr "$distro"
+    optimize_tunnel_interfaces
+    install_tunnel_tune_service
     save_optimize_version
 
     echo
