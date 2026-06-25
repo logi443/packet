@@ -19,6 +19,19 @@ function pause_return_menu() {
     read -rp "Press Enter to return to menu..." _
 }
 
+function wait_for_apt() {
+    local waited=false
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || \
+          fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+        if [[ "$waited" == false ]]; then
+            log "Waiting for other apt process to finish..."
+            waited=true
+        fi
+        sleep 2
+    done
+}
+
 function install_prerequisites() {
     local pkgs=()
     command -v unzip >/dev/null 2>&1 || pkgs+=(unzip)
@@ -27,6 +40,7 @@ function install_prerequisites() {
     command -v curl >/dev/null 2>&1 || pkgs+=(curl)
     if [[ "${#pkgs[@]}" -gt 0 ]]; then
         log "Installing prerequisites: ${pkgs[*]}..."
+        wait_for_apt
         apt-get update -qq >/dev/null 2>&1
         apt-get install -y -qq "${pkgs[@]}" >/dev/null 2>&1
         log "Prerequisites installed."
@@ -1852,6 +1866,7 @@ function iperf3_test() {
     # Install iperf3 if not present
     if ! command -v iperf3 >/dev/null 2>&1; then
         log "Installing iperf3..."
+        wait_for_apt
         apt-get update -qq >/dev/null 2>&1
         apt-get install -y -qq iperf3 >/dev/null 2>&1
         if ! command -v iperf3 >/dev/null 2>&1; then
@@ -2186,6 +2201,7 @@ function optimize_tunnel_interfaces() {
 
     # Install ethtool if not present
     if ! command -v ethtool >/dev/null 2>&1; then
+        wait_for_apt
         apt-get install -y -qq ethtool >/dev/null 2>&1 || true
     fi
 }
@@ -2362,6 +2378,7 @@ function optimize_server() {
     if [[ "$distro" == "debian" ]]; then
         if ! dpkg -l | grep -q linux-modules 2>/dev/null; then
             log "Ensuring kernel headers/modules are available..."
+            wait_for_apt
             apt-get update -qq >/dev/null 2>&1
             apt-get install -y -qq linux-headers-"$(uname -r)" 2>/dev/null || true
         fi
@@ -2370,6 +2387,7 @@ function optimize_server() {
     # Install ethtool for interface tuning
     if ! command -v ethtool >/dev/null 2>&1; then
         log "Installing ethtool..."
+        wait_for_apt
         apt-get update -qq >/dev/null 2>&1
         apt-get install -y -qq ethtool >/dev/null 2>&1 || true
     fi
