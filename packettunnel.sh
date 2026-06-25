@@ -1892,6 +1892,84 @@ function iperf3_test() {
     pause_return_menu
 }
 
+function mtu_test() {
+    echo
+    echo "MTU Discovery Test"
+    echo "===================="
+    echo
+    read -rp "Enter destination IP [default: 10.10.0.2]: " dest_ip
+    [[ -z "$dest_ip" ]] && dest_ip="10.10.0.2"
+
+    echo
+    log "Finding optimal MTU for $dest_ip ..."
+    echo
+
+    local mtu=1500
+    local step=10
+    local best_mtu=1400
+
+    # First quick check: does 1500 work?
+    if ping -c 1 -W 2 -M do -s $((mtu - 28)) "$dest_ip" >/dev/null 2>&1; then
+        echo "MTU 1500 works - no fragmentation issues."
+        best_mtu=1500
+    else
+        # Binary search for optimal MTU
+        local low=1200
+        local high=1500
+        while (( low <= high )); do
+            mtu=$(( (low + high) / 2 ))
+            local payload=$((mtu - 28))
+            if ping -c 1 -W 2 -M do -s "$payload" "$dest_ip" >/dev/null 2>&1; then
+                best_mtu=$mtu
+                low=$((mtu + 1))
+            else
+                high=$((mtu - 1))
+            fi
+        done
+    fi
+
+    echo "========================================="
+    echo " Optimal MTU: $best_mtu"
+    echo "========================================="
+    echo
+    echo " Recommended Waterwall MTU: $((best_mtu - 80))"
+    echo " (subtract ~80 bytes for tunnel overhead)"
+    echo
+    echo "========================================="
+
+    if [[ -f "$CORE_FILE" ]] && command -v jq >/dev/null 2>&1; then
+        local current_mtu
+        current_mtu="$(jq -r '.misc.mtu // empty' "$CORE_FILE" 2>/dev/null)"
+        if [[ -n "$current_mtu" ]]; then
+            echo
+            echo "Current Waterwall MTU in core.json: $current_mtu"
+            local recommended=$((best_mtu - 80))
+            if [[ "$current_mtu" -ne "$recommended" ]]; then
+                read -rp "Update core.json MTU to $recommended? (y/n): " update_mtu
+                update_mtu="$(echo "$update_mtu" | tr '[:upper:]' '[:lower:]')"
+                if [[ "$update_mtu" == "y" || "$update_mtu" == "yes" ]]; then
+                    local tmp
+                    tmp="$(mktemp)"
+                    jq --argjson m "$recommended" '.misc.mtu = $m' "$CORE_FILE" > "$tmp"
+                    mv -f "$tmp" "$CORE_FILE"
+                    log "core.json MTU updated to $recommended."
+                    echo
+                    read -rp "Restart service to apply? (y/n): " restart_ans
+                    restart_ans="$(echo "$restart_ans" | tr '[:upper:]' '[:lower:]')"
+                    if [[ "$restart_ans" == "y" || "$restart_ans" == "yes" ]]; then
+                        systemctl restart "${SERVICE_NAME}.service" || true
+                        log "Service restarted."
+                    fi
+                fi
+            else
+                echo "Already set to optimal value."
+            fi
+        fi
+    fi
+
+    pause_return_menu
+}
+
 function service_management_menu() {
     if ! is_installed; then
         echo
@@ -1909,17 +1987,19 @@ function service_management_menu() {
     echo "3) Test Tunnel"
     echo "4) Change Ports"
     echo "5) iPerf3 Speed Test"
-    echo "6) Uninstall"
+    echo "6) MTU Test & Optimize"
+    echo "7) Uninstall"
     echo "0) Back"
     echo
-    read -rp "Choose an option [0-6]: " svc_choice
+    read -rp "Choose an option [0-7]: " svc_choice
     case "$svc_choice" in
         1) restart_service ;;
         2) status_service ;;
         3) test_tunnel ;;
         4) change_ports ;;
         5) iperf3_test ;;
-        6) uninstall ;;
+        6) mtu_test ;;
+        7) uninstall ;;
         0) return ;;
         *) echo "Invalid option."; pause_return_menu ;;
     esac
