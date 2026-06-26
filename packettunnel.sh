@@ -1671,7 +1671,18 @@ function install_reverse_bitswap() {
     download_waterwall || { pause_return_menu; return; }
 
     local role
-    role="$(ask_role)"
+    while true; do
+        echo
+        echo "Which server is this?"
+        echo "  1) Iran"
+        echo "  2) Kharej"
+        echo "  0) Back"
+        read -rp "Choose [0-2]: " role
+        case "$role" in
+            0|1|2) break ;;
+            *) echo "Invalid choice. Please enter 1 or 2." ;;
+        esac
+    done
     [[ "$role" == "0" ]] && return
 
     server_ip=$(choose_server_ip)
@@ -1942,17 +1953,16 @@ function install_menu() {
     echo "Install Tunnel"
     echo "=================="
     echo "1) BitSwap"
-    echo "2) Reverse BitSwap (Kharej connects to Iran)"
-    echo "3) Reverse Reality"
-    echo "4) PacketTunnel (Classic)"
+    echo "2) Reverse Reality"
+    echo "3) PacketTunnel (Classic)"
     echo "0) Back"
     echo
-    read -rp "Choose an option [0-4]: " install_choice
+    read -rp "Choose an option [0-3]: " install_choice
     case "$install_choice" in
         1) install_bitswap ;;
-        2) install_reverse_bitswap ;;
-        3) install_reverse_reality ;;
-        4) install_packettunnel ;;
+        2) install_reverse_reality ;;
+        3) install_packettunnel ;;
+        99) install_reverse_bitswap ;;
         0) return ;;
         *) echo "Invalid option."; pause_return_menu ;;
     esac
