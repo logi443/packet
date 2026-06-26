@@ -19,22 +19,65 @@ function pause_return_menu() {
     read -rp "Press Enter to return to menu..." _
 }
 
+function kill_apt_locks() {
+    local lock_files=(
+        /var/lib/dpkg/lock-frontend
+        /var/lib/dpkg/lock
+        /var/lib/apt/lists/lock
+        /var/cache/apt/archives/lock
+        /var/cache/debconf/config.dat
+    )
+    for lf in "${lock_files[@]}"; do
+        local pids
+        pids="$(fuser "$lf" 2>/dev/null)" || true
+        if [[ -n "$pids" ]]; then
+            log "Killing process holding $lf (PIDs: $pids)..."
+            kill -9 $pids 2>/dev/null || true
+        fi
+    done
+    sleep 1
+    rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock \
+          /var/lib/apt/lists/lock /var/cache/apt/archives/lock 2>/dev/null || true
+    dpkg --configure -a >/dev/null 2>&1 || true
+}
+
 function wait_for_apt() {
-    local waited=false
-    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
-          fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || \
-          fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
-          fuser /var/cache/debconf/config.dat >/dev/null 2>&1 || \
-          fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do
-        if [[ "$waited" == false ]]; then
-            log "Waiting for other apt/dpkg process to finish..."
-            waited=true
+    local lock_files=(
+        /var/lib/dpkg/lock-frontend
+        /var/lib/dpkg/lock
+        /var/lib/apt/lists/lock
+        /var/cache/apt/archives/lock
+        /var/cache/debconf/config.dat
+    )
+    local waited=0
+    local max_wait=30
+
+    while true; do
+        local locked=false
+        for lf in "${lock_files[@]}"; do
+            if fuser "$lf" >/dev/null 2>&1; then
+                locked=true
+                break
+            fi
+        done
+
+        [[ "$locked" == false ]] && break
+
+        if [[ "$waited" -eq 0 ]]; then
+            log "Waiting for other apt/dpkg process to finish (max ${max_wait}s)..."
+        fi
+
+        waited=$((waited + 2))
+        if [[ "$waited" -ge "$max_wait" ]]; then
+            log "Timeout reached. Force-clearing apt locks..."
+            kill_apt_locks
+            break
         fi
         sleep 2
     done
 
     # Fix any broken/interrupted installs
-    if [[ "$waited" == true ]]; then
+    if [[ "$waited" -gt 0 ]]; then
         dpkg --configure -a >/dev/null 2>&1 || true
     fi
 }
@@ -2353,8 +2396,8 @@ function iperf3_test() {
     if ! command -v iperf3 >/dev/null 2>&1; then
         log "Installing iperf3..."
         wait_for_apt
-        apt-get update -qq >/dev/null 2>&1
-        apt-get install -y -qq iperf3 >/dev/null 2>&1
+        apt-get update
+        apt-get install -y -o DPkg::Lock::Timeout=60 iperf3
         if ! command -v iperf3 >/dev/null 2>&1; then
             echo "Failed to install iperf3."
             pause_return_menu
