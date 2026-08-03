@@ -1649,15 +1649,6 @@ function generate_hd_bitswap_iran_config() {
             "settings": {
                 "data": "src_context->port"
             },
-            "next": "mux-client"
-        },
-        {
-            "name": "mux-client",
-            "type": "MuxClient",
-            "settings": {
-                "mode": "fixed-connections-count",
-                "per-worker-connections-count": \$each_worker_mux_connections_count\$
-            },
             "next": "halfduplex-client"
         },
         {
@@ -1804,12 +1795,6 @@ function generate_hd_bitswap_kharej_config() {
         {
             "name": "halfduplex-server",
             "type": "HalfDuplexServer",
-            "settings": {},
-            "next": "mux-s"
-        },
-        {
-            "name": "mux-s",
-            "type": "MuxServer",
             "settings": {},
             "next": "header-server"
         },
