@@ -3515,6 +3515,36 @@ PY
     reset_bitswap_default
 }
 
+function set_bit_by_number() {
+    # Manually set one of the 28 pairs by its number.
+    if [[ ! -f "$CONFIG_FILE" ]] || ! grep -q "tcp-bit" "$CONFIG_FILE"; then
+        echo "No bitswap (tcp-bit) config found."; return 1
+    fi
+    local PAIRS=(
+        "psh syn" "fin syn" "ack cwr" "cwr psh" "ece psh" "psh urg"
+        "psh rst" "cwr ece" "cwr urg" "ece urg" "fin urg" "ack urg"
+        "cwr rst" "ece rst" "cwr fin" "ece fin" "rst urg" "syn urg"
+        "ece syn" "cwr syn"
+        "ack ece" "ack psh" "ack rst" "ack syn" "ack fin" "fin psh" "rst syn" "fin rst"
+    )
+    local N=${#PAIRS[@]}
+    echo
+    echo "Available pairs:"
+    local i
+    for ((i=0;i<N;i++)); do
+        local tag=""; (( i>=20 )) && tag="  [risk]"
+        printf "  %2d) %s%s\n" "$((i+1))" "${PAIRS[$i]/ / <-> }" "$tag"
+    done
+    echo
+    read -rp "Enter pair number [1-$N]: " num
+    num=$(echo "$num" | tr -dc '0-9')
+    if [[ -z "$num" ]] || (( num<1 || num>N )); then
+        echo "Invalid number."; return 1
+    fi
+    set -- ${PAIRS[$((num-1))]}
+    apply_bitswap_pair "$1" "$2"
+}
+
 function change_bitswap_menu() {
     local G="\e[32m" RST="\e[0m"
     while true; do
@@ -3540,6 +3570,7 @@ function change_bitswap_menu() {
         if [[ -n "$a3" ]]; then echo -e "${G}3) ack <-> cwr   (ACTIVE)${RST}"; else echo "3) ack <-> cwr"; fi
         echo "4) Full auto-cycle (all 28 pairs, test each)"
         echo "5) Reset to DEFAULT (up: psh<->cwr, dw: psh<->rst)"
+        echo "6) Set a specific pair by number (1-28)"
         echo "0) Back to main menu"
         echo
         if [[ -n "$active" && -z "$a1$a2$a3" ]]; then
@@ -3547,13 +3578,14 @@ function change_bitswap_menu() {
             echo
         fi
 
-        read -rp "Choose an option [0-5]: " bit_choice
+        read -rp "Choose an option [0-6]: " bit_choice
         case "$bit_choice" in
             1) apply_bitswap_pair psh syn ; pause_return_menu ;;
             2) apply_bitswap_pair syn fin ; pause_return_menu ;;
             3) apply_bitswap_pair ack cwr ; pause_return_menu ;;
             4) bit_cycle_full_menu ; pause_return_menu ;;
             5) reset_bitswap_default ; pause_return_menu ;;
+            6) set_bit_by_number ; pause_return_menu ;;
             0) return ;;
             *) echo "Invalid option."; pause_return_menu ;;
         esac
