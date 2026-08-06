@@ -1641,7 +1641,7 @@ function generate_rreality_kharej_config() {
             "type": "RealityClient",
             "settings": {
                 "sni": \$domain_to_handshake_reality\$,
-                "verify": false,
+                "verify": true,
                 "password": \$password\$,
                 "algorithm": "chacha20-poly1305"
             },
