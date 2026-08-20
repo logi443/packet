@@ -500,29 +500,32 @@ function download_waterwall() {
     local version
     version="$(echo "$download_url" | grep -oP '/download/\K[^/]+')"
     log "Downloading $asset_name (version: $version)..."
-    if ! curl -fsSL "$download_url" -o "$asset_name"; then
+    mkdir -p "$INSTALL_DIR"
+    if ! curl -fsSL "$download_url" -o "$INSTALL_DIR/$asset_name"; then
         echo "Download failed (curl error) for $asset_name."
-        rm -f "$asset_name"
+        rm -f "$INSTALL_DIR/$asset_name"
         return 1
     fi
-    if [[ ! -s "$asset_name" ]]; then
+    if [[ ! -s "$INSTALL_DIR/$asset_name" ]]; then
         echo "Downloaded file is empty."
-        rm -f "$asset_name"
+        rm -f "$INSTALL_DIR/$asset_name"
         return 1
     fi
 
     log "Extracting..."
-    if ! unzip -o "$asset_name" -d . >/dev/null; then
+    # Remove any stale path named Waterwall (file OR directory) before extracting.
+    rm -rf "$INSTALL_DIR/Waterwall"
+    if ! unzip -o "$INSTALL_DIR/$asset_name" -d "$INSTALL_DIR" >/dev/null; then
         echo "Extraction failed (corrupt download?)."
-        rm -f "$asset_name"
+        rm -f "$INSTALL_DIR/$asset_name"
         return 1
     fi
-    rm -f "$asset_name"
-    if [[ ! -s "Waterwall" ]]; then
+    rm -f "$INSTALL_DIR/$asset_name"
+    if [[ ! -s "$INSTALL_DIR/Waterwall" ]]; then
         echo "Waterwall binary not found after extraction."
         return 1
     fi
-    chmod +x Waterwall
+    chmod +x "$INSTALL_DIR/Waterwall"
     log "Waterwall downloaded and ready (version: $version)."
     type invalidate_version_cache >/dev/null 2>&1 && invalidate_version_cache
 }
